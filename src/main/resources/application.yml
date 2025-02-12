@@ -1,0 +1,22 @@
+auth:
+  smsru-api-id: 60731372-71ED-2802-1AD1-21ED28AB3A44
+  jwt-secret: alextir
+spring:
+  application:
+    name: doors
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: sklm
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  liquibase:
+    enabled: false  # ??????? ????????, ???? ???????? ??????? ? Liquibase
+
