@@ -1,5 +1,7 @@
 package tir.alex.doors.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,7 +14,6 @@ import tir.alex.doors.Config.SmsConfig;
 import tir.alex.doors.service.AuthService;
 
 import java.util.Date;
-import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -34,24 +35,24 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public ResponseEntity<String> sendCode(String phone) {
-        String code = smsConfig.getTestNumbers().contains(phone)
-                ? "1111"
-                : generateAndSendCode(phone);
+        String code;
 
-        if (code == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Ошибка при отправке кода");
+        if (smsConfig.getTestNumbers().contains(phone)) {
+            code = "1111";
+        } else {
+            String response = sendRequestToSmsRu(phone);
+            if (response == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Ошибка при отправке кода");
+            }
+
+            code = extractCodeFromResponse(response);
+            if (code == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Ошибка при разборе ответа SMS.RU");
+            }
         }
 
         redisTemplate.opsForValue().set("sms_code:" + phone, code, 5, TimeUnit.MINUTES);
         return ResponseEntity.ok("Код отправлен");
-    }
-
-    private String generateAndSendCode(String phone) {
-        String code = String.format("%04d", new Random().nextInt(10000));
-        String url = String.format("https://sms.ru/code/call?api_id=%s&phone=%s&code=%s", smsruApiId, phone, code);
-        String response = new RestTemplate().getForObject(url, String.class);
-
-        return (response != null && response.contains("\"status\":\"OK\"")) ? code : null;
     }
 
     @Override
@@ -62,6 +63,24 @@ public class AuthServiceImpl implements AuthService {
             return ResponseEntity.ok(generateJwtToken(phone));
         }
         return ResponseEntity.badRequest().body("Неверный код");
+    }
+
+    private String sendRequestToSmsRu(String phone) {
+        String url = String.format("https://sms.ru/code/call?api_id=%s&phone=%s", smsruApiId, phone);
+        return new RestTemplate().getForObject(url, String.class);
+    }
+
+    private String extractCodeFromResponse(String response) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode rootNode = objectMapper.readTree(response);
+            if (rootNode.has("status") && "OK".equals(rootNode.get("status").asText())) {
+                return rootNode.has("code") ? rootNode.get("code").asText() : null;
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return null;
     }
 
     private String generateJwtToken(String phone) {
