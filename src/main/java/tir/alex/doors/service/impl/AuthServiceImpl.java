@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import tir.alex.doors.Config.SmsConfig;
+import tir.alex.doors.entity.User;
+import tir.alex.doors.repo.UserRepository;
 import tir.alex.doors.service.AuthService;
 
 import java.util.Date;
@@ -21,6 +23,7 @@ public class AuthServiceImpl implements AuthService {
 
     private final SmsConfig smsConfig;
     private final StringRedisTemplate redisTemplate;
+    private final UserRepository userRepository;
 
     @Value("${auth.smsru-api-id}")
     private String smsruApiId;
@@ -28,9 +31,10 @@ public class AuthServiceImpl implements AuthService {
     @Value("${auth.jwt-secret}")
     private String jwtSecret;
 
-    public AuthServiceImpl(SmsConfig smsConfig, StringRedisTemplate redisTemplate) {
+    public AuthServiceImpl(SmsConfig smsConfig, StringRedisTemplate redisTemplate, UserRepository userRepository) {
         this.smsConfig = smsConfig;
         this.redisTemplate = redisTemplate;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -54,13 +58,24 @@ public class AuthServiceImpl implements AuthService {
         redisTemplate.opsForValue().set("sms_code:" + phone, code, 5, TimeUnit.MINUTES);
         return ResponseEntity.ok("Код отправлен");
     }
-
     @Override
     public ResponseEntity<String> verifyCode(String phone, String code) {
         String storedCode = redisTemplate.opsForValue().get("sms_code:" + phone);
+
         if (storedCode != null && storedCode.equals(code)) {
             redisTemplate.delete("sms_code:" + phone);
-            return ResponseEntity.ok(generateJwtToken(phone));
+            userRepository.findByPhoneNumber(phone).orElseGet(() -> {
+                User newUser = new User();
+                newUser.setPhoneNumber(phone);
+                return userRepository.save(newUser);
+            });
+            String token = Jwts.builder()
+                    .setSubject(phone)
+                    .setIssuedAt(new Date())
+                    .setExpiration(new Date(System.currentTimeMillis() + 86400000))
+                    .signWith(SignatureAlgorithm.HS256,jwtSecret.getBytes())
+                    .compact();
+            return ResponseEntity.ok(token);
         }
         return ResponseEntity.badRequest().body("Неверный код");
     }
@@ -81,14 +96,5 @@ public class AuthServiceImpl implements AuthService {
             return null;
         }
         return null;
-    }
-
-    private String generateJwtToken(String phone) {
-        return Jwts.builder()
-                .setSubject(phone)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + 86400000))
-                .signWith(SignatureAlgorithm.HS256, jwtSecret.getBytes())
-                .compact();
     }
 }
