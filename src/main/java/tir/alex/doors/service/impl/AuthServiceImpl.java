@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
@@ -12,30 +13,25 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import tir.alex.doors.Config.SmsConfig;
 import tir.alex.doors.entity.User;
-import tir.alex.doors.repo.UserRepository;
 import tir.alex.doors.service.AuthService;
+import tir.alex.doors.service.UserService;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
     private final SmsConfig smsConfig;
     private final StringRedisTemplate redisTemplate;
-    private final UserRepository userRepository;
-
+    private final UserService userService;
     @Value("${auth.smsru-api-id}")
     private String smsruApiId;
 
     @Value("${auth.jwt-secret}")
     private String jwtSecret;
-
-    public AuthServiceImpl(SmsConfig smsConfig, StringRedisTemplate redisTemplate, UserRepository userRepository) {
-        this.smsConfig = smsConfig;
-        this.redisTemplate = redisTemplate;
-        this.userRepository = userRepository;
-    }
 
     @Override
     public ResponseEntity<String> sendCode(String phone) {
@@ -64,16 +60,20 @@ public class AuthServiceImpl implements AuthService {
 
         if (storedCode != null && storedCode.equals(code)) {
             redisTemplate.delete("sms_code:" + phone);
-            userRepository.findByPhoneNumber(phone).orElseGet(() -> {
-                User newUser = new User();
-                newUser.setPhoneNumber(phone);
-                return userRepository.save(newUser);
-            });
+            User user = userService.findByPhoneNumber(phone);
+            if (user == null) {
+                user = userService.createUser(phone);
+            }
+            String role = user.getRole();
+            if (!role.startsWith("ROLE_")) {
+                role = "ROLE_" + role;
+            }
             String token = Jwts.builder()
                     .setSubject(phone)
+                    .claim("role", role)
                     .setIssuedAt(new Date())
                     .setExpiration(new Date(System.currentTimeMillis() + 86400000))
-                    .signWith(SignatureAlgorithm.HS256,jwtSecret.getBytes())
+                    .signWith(SignatureAlgorithm.HS256, jwtSecret.getBytes(StandardCharsets.UTF_8))
                     .compact();
             return ResponseEntity.ok(token);
         }
