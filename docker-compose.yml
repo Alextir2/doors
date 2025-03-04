@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: doors_app
+    ports:
+      - "8080:8080"
+      - "5005:5005"
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/doors
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: sklm
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+    networks:
+      - backend
+
+  redis:
+    image: redis:7
+    container_name: doors_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:16
+    container_name: doors_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: doors
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: sklm
+    networks:
+      - backend
+
+networks:
+  backend:
