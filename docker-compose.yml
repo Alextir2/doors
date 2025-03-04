@@ -11,7 +11,9 @@ services:
       - redis
       - postgres
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/doors
+      SPRING_DATASOURCE_URL: jdbc:postgresql://host.docker.internal:5432/doors
+#      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/doors
+#      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/doors
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: sklm
       SPRING_DATA_REDIS_HOST: redis
@@ -37,6 +39,7 @@ services:
       POSTGRES_DB: doors
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: sklm
+      POSTGRES_HOST: host.docker.internal
     networks:
       - backend
 

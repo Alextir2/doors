@@ -1,0 +1,1 @@
+CREATE SEQUENCE id_sequence_generator START WITH 1000 INCREMENT BY 1;
